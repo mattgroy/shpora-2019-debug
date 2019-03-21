@@ -4,7 +4,10 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using JPEG.Images;
+using JPEG.Utilities;
 using PixelFormat = JPEG.Images.PixelFormat;
 
 namespace JPEG
@@ -21,9 +24,8 @@ namespace JPEG
             {
                 Console.WriteLine(IntPtr.Size == 8 ? "64-bit version" : "32-bit version");
                 var sw = Stopwatch.StartNew();
-                const string fileName = @"sample.bmp";
-//                const string fileName = @"earth.bmp";
-//				var fileName = "Big_Black_River_Railroad_Bridge.bmp";
+//                const string fileName = @"sample.bmp";
+                const string fileName = @"earth.bmp";
                 var compressedFileName = fileName + ".compressed." + CompressionQuality;
                 var uncompressedFileName = fileName + ".uncompressed." + CompressionQuality + ".bmp";
 
@@ -59,10 +61,18 @@ namespace JPEG
 
         private static CompressedImage Compress(Matrix matrix, int quality = 50)
         {
-            var allQuantizedBytes = new List<byte>();
-
+            var tuples = new List<(int, int)>();
             for (var y = 0; y < matrix.Height; y += DCTSize)
             for (var x = 0; x < matrix.Width; x += DCTSize)
+                tuples.Add((x, y));
+
+            var allQuantizedBytes = new List<byte>[tuples.Count];
+
+//            MathEx.LoopByTwoVariablesStepped(0, matrix.Height, 0, matrix.Width, DCTSize, (y, x) =>
+            Parallel.For(0, tuples.Count, i =>
+            {
+                var (x, y) = tuples[i];
+                allQuantizedBytes[i] = new List<byte>();
                 foreach (var selector in new Func<Pixel, double>[] {p => p.Y, p => p.Cb, p => p.Cr})
                 {
                     var subMatrix = GetSubMatrix(matrix, y, DCTSize, x, DCTSize, selector);
@@ -70,10 +80,12 @@ namespace JPEG
                     var channelFreqs = DCT.DCT2D(subMatrix);
                     var quantizedFreqs = Quantize(channelFreqs, quality);
                     var quantizedBytes = ZigZagScan(quantizedFreqs);
-                    allQuantizedBytes.AddRange(quantizedBytes);
+//                    allQuantizedBytes.Add(quantizedBytes);
+                    allQuantizedBytes[i].AddRange(quantizedBytes);
                 }
-
-            var compressedBytes = HuffmanCodec.Encode(allQuantizedBytes, out var decodeTable, out var bitsCount);
+            });
+            
+            var compressedBytes = HuffmanCodec.Encode(allQuantizedBytes.SelectMany(i => i), out var decodeTable, out var bitsCount);
 
             return new CompressedImage
             {
@@ -85,28 +97,58 @@ namespace JPEG
         private static Matrix Uncompress(CompressedImage image)
         {
             var result = new Matrix(image.Height, image.Width);
-            using (var allQuantizedBytes =
-                new MemoryStream(HuffmanCodec.Decode(image.CompressedBytes, image.DecodeTable, image.BitsCount)))
-            {
-                for (var y = 0; y < image.Height; y += DCTSize)
-                for (var x = 0; x < image.Width; x += DCTSize)
-                {
-                    var _y = new double[DCTSize, DCTSize];
-                    var cb = new double[DCTSize, DCTSize];
-                    var cr = new double[DCTSize, DCTSize];
-                    foreach (var channel in new[] {_y, cb, cr})
-                    {
-                        var quantizedBytes = new byte[DCTSize * DCTSize];
-                        allQuantizedBytes.ReadAsync(quantizedBytes, 0, quantizedBytes.Length).Wait();
-                        var quantizedFreqs = ZigZagUnScan(quantizedBytes);
-                        var channelFreqs = DeQuantize(quantizedFreqs, image.Quality);
-                        DCT.IDCT2D(channelFreqs, channel);
-                        ShiftMatrixValues(channel, 128);
-                    }
+//            using (var allQuantizedBytes =
+//                new MemoryStream(HuffmanCodec.Decode(image.CompressedBytes, image.DecodeTable, image.BitsCount)))
+//            {
+//                for (var y = 0; y < image.Height; y += DCTSize)
+//                for (var x = 0; x < image.Width; x += DCTSize)
+//                {
+//                    var _y = new double[DCTSize, DCTSize];
+//                    var cb = new double[DCTSize, DCTSize];
+//                    var cr = new double[DCTSize, DCTSize];
+//                    foreach (var channel in new[] {_y, cb, cr})
+//                    {
+//                        var quantizedBytes = new byte[DCTSize * DCTSize];
+//                        allQuantizedBytes.ReadAsync(quantizedBytes, 0, quantizedBytes.Length).Wait();
+//                        var quantizedFreqs = ZigZagUnScan(quantizedBytes);
+//                        var channelFreqs = DeQuantize(quantizedFreqs, image.Quality);
+//                        DCT.IDCT2D(channelFreqs, channel);
+//                        ShiftMatrixValues(channel, 128);
+//                    }
+//
+//                    SetPixels(result, _y, cb, cr, PixelFormat.YCbCr, y, x);
+//                }
+//            }
 
-                    SetPixels(result, _y, cb, cr, PixelFormat.YCbCr, y, x);
+            var decodedBytesArray = HuffmanCodec.Decode(image.CompressedBytes, image.DecodeTable, image.BitsCount);
+            var tuples = new List<(int, int)>();
+            for (var y = 0; y < image.Height; y += DCTSize)
+            for (var x = 0; x < image.Width; x += DCTSize)
+                tuples.Add((x, y));
+
+//            var allQuantizedBytes = new List<byte>[tuples.Count];
+
+            Parallel.For(0, tuples.Count, i =>
+            {
+                var (x, y) = tuples[i];
+                var _y = new double[DCTSize, DCTSize];
+                var cb = new double[DCTSize, DCTSize];
+                var cr = new double[DCTSize, DCTSize];
+
+                var offset = 0;
+                foreach (var channel in new[] {_y, cb, cr})
+                {
+                    var quantizedBytes = new byte[DCTSize * DCTSize];
+                    Buffer.BlockCopy(decodedBytesArray, quantizedBytes.Length * (i*3 + offset), quantizedBytes, 0, quantizedBytes.Length);
+                    var quantizedFreqs = ZigZagUnScan(quantizedBytes);
+                    var channelFreqs = DeQuantize(quantizedFreqs, image.Quality);
+                    DCT.IDCT2D(channelFreqs, channel);
+                    ShiftMatrixValues(channel, 128);
+                    offset++;
                 }
-            }
+
+                SetPixels(result, _y, cb, cr, PixelFormat.YCbCr, y, x);
+            });
 
             return result;
         }
@@ -119,6 +161,8 @@ namespace JPEG
             for (var y = 0; y < height; y++)
             for (var x = 0; x < width; x++)
                 subMatrix[y, x] = subMatrix[y, x] + shiftValue;
+//            MathEx.LoopByTwoVariables(0, height, 0, width, (y, x) =>
+//                subMatrix[y, x] = subMatrix[y, x] + shiftValue);
         }
 
         private static void SetPixels(Matrix matrix, double[,] a, double[,] b, double[,] c, PixelFormat format,

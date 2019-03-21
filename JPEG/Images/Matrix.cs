@@ -88,6 +88,8 @@ namespace JPEG.Images
                     }
                 }
             }
+            
+            bmp.UnlockBits(bitmapData);
 
             return bmp;
         }

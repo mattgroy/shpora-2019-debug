@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using JPEG.Utilities;
 
 namespace JPEG
@@ -16,11 +17,10 @@ namespace JPEG
                 0, height,
                 (u, v) =>
                 {
-                    var sum = MathEx
-                        .SumByTwoVariables(
-                            0, width,
-                            0, height,
-                            (x, y) => BasisFunction(input[x, y], u, v, x, y, height, width));
+                    var sum = MathEx.SumByTwoVariables(
+                        0, width,
+                        0, height,
+                        (x, y) => BasisFunction(input[x, y], u, v, x, y, height, width));
 
                     coeffs[u, v] = sum * Beta(height, width) * Alpha(u) * Alpha(v);
                 });
