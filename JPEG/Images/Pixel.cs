@@ -2,7 +2,7 @@
 
 namespace JPEG.Images
 {
-    public class Pixel
+    public struct Pixel
     {
 //        private readonly PixelFormat format;
         public Pixel(double a, double b, double c, PixelFormat format)

@@ -30,22 +30,38 @@ namespace JPEG
 
         public static void IDCT2D(double[,] coeffs, double[,] output)
         {
-            for (var x = 0; x < coeffs.GetLength(1); x++)
-            for (var y = 0; y < coeffs.GetLength(0); y++)
-            {
-                var sum = MathEx
-                    .SumByTwoVariables(
+//            for (var x = 0; x < coeffs.GetLength(1); x++)
+//            for (var y = 0; y < coeffs.GetLength(0); y++)
+//            {
+//                var sum = MathEx
+//                    .SumByTwoVariables(
+//                        0, coeffs.GetLength(1),
+//                        0, coeffs.GetLength(0),
+//                        (u, v) =>
+//                            BasisFunction(coeffs[u, v], u, v, x, y, coeffs.GetLength(0), coeffs.GetLength(1)) *
+//                            Alpha(u) * Alpha(v));
+//
+//                output[x, y] = sum * Beta(coeffs.GetLength(0), coeffs.GetLength(1));
+//            }
+            MathEx.LoopByTwoVariables(
+                0, coeffs.GetLength(1),
+                0, coeffs.GetLength(0),
+                (x, y) =>
+                {
+                    var sum = MathEx.SumByTwoVariables(
                         0, coeffs.GetLength(1),
                         0, coeffs.GetLength(0),
                         (u, v) =>
-                            BasisFunction(coeffs[u, v], u, v, x, y, coeffs.GetLength(0), coeffs.GetLength(1)) *
-                            Alpha(u) * Alpha(v));
+                            BasisFunction(
+                                coeffs[u, v], u, v, x, y,
+                                coeffs.GetLength(0),
+                                coeffs.GetLength(1)) * Alpha(u) * Alpha(v));
 
-                output[x, y] = sum * Beta(coeffs.GetLength(0), coeffs.GetLength(1));
-            }
+                    output[x, y] = sum * Beta(coeffs.GetLength(0), coeffs.GetLength(1));
+                });
         }
 
-        public static double BasisFunction(double a, double u, double v, double x, double y, int height, int width)
+        private static double BasisFunction(double a, double u, double v, double x, double y, int height, int width)
         {
             var b = Math.Cos((2d * x + 1d) * u * Math.PI / (2 * width));
             var c = Math.Cos((2d * y + 1d) * v * Math.PI / (2 * height));
