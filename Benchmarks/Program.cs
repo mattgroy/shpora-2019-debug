@@ -11,7 +11,7 @@ namespace Benchmarks
 //            BenchmarkRunner.Run<MemoryTraffic>();
 //            BenchmarkRunner.Run<StructVsClassBenchmark>();
 //            BenchmarkRunner.Run<BitCountBenchmark>();
-            BenchmarkRunner.Run<ByteArrayEqualityBenchmark>();
+//            BenchmarkRunner.Run<ByteArrayEqualityBenchmark>();
 //            BenchmarkRunner.Run<SortedVsUnsorted>();
 //            BenchmarkRunner.Run<NewConstraintBenchmark>();
 //            BenchmarkRunner.Run<MaxBenchmark>();
